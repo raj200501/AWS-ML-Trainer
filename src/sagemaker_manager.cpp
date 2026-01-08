@@ -1,74 +1,50 @@
 #include "sagemaker_manager.h"
 #include "logger.h"
-#include <aws/core/Aws.h>
-#include <aws/sagemaker/SageMakerClient.h>
-#include <aws/sagemaker/model/CreateTrainingJobRequest.h>
-#include <aws/sagemaker/model/DescribeTrainingJobRequest.h>
-#include <aws/sagemaker/model/DescribeTrainingJobResult.h>
-#include <iostream>
-#include <thread>
-#include <chrono>
+#include "path_utils.h"
+#include "training_job.h"
+#include "utils/file_utils.h"
+#include <stdexcept>
 
-SageMakerManager::SageMakerManager(const std::string &region) {
-    Aws::Client::ClientConfiguration config;
-    config.region = region;
-    client = std::make_shared<Aws::SageMaker::SageMakerClient>(config);
+SageMakerManager::SageMakerManager(const AppConfig &config)
+    : config(config) {}
+
+std::string SageMakerManager::jobDirectory(const std::string &jobName) const {
+    return PathUtils::join({config.outputDir, "jobs", jobName});
 }
 
-void SageMakerManager::createTrainingJob(const std::string &jobName, const std::string &trainingImage, const std::string &roleArn,
-                                         const std::string &inputBucket, const std::string &inputKey,
-                                         const std::string &outputBucket, const std::string &outputKey) {
-    Aws::SageMaker::Model::CreateTrainingJobRequest request;
-    request.SetTrainingJobName(jobName.c_str());
-    request.SetAlgorithmSpecification(Aws::SageMaker::Model::AlgorithmSpecification()
-        .WithTrainingImage(trainingImage.c_str())
-        .WithTrainingInputMode(Aws::SageMaker::Model::TrainingInputMode::File));
-    request.SetRoleArn(roleArn.c_str());
-    request.SetInputDataConfig({ Aws::SageMaker::Model::Channel()
-        .WithChannelName("training")
-        .WithDataSource(Aws::SageMaker::Model::DataSource()
-            .WithS3DataSource(Aws::SageMaker::Model::S3DataSource()
-                .WithS3Uri("s3://" + inputBucket + "/" + inputKey)
-                .WithS3DataType(Aws::SageMaker::Model::S3DataType::S3Prefix)
-                .WithS3DataDistributionType(Aws::SageMaker::Model::S3DataDistributionType::FullyReplicated)))
-        .WithContentType("text/csv") });
-    request.SetOutputDataConfig(Aws::SageMaker::Model::OutputDataConfig()
-        .WithS3OutputPath("s3://" + outputBucket + "/" + outputKey));
-    request.SetResourceConfig(Aws::SageMaker::Model::ResourceConfig()
-        .WithInstanceCount(1)
-        .WithInstanceType(Aws::SageMaker::Model::TrainingInstanceType::MlC4Xlarge)
-        .WithVolumeSizeInGB(10));
-    request.SetStoppingCondition(Aws::SageMaker::Model::StoppingCondition()
-        .WithMaxRuntimeInSeconds(3600));
+std::string SageMakerManager::outputPathForJob(const std::string &jobName) const {
+    return PathUtils::join(jobDirectory(jobName), "artifacts");
+}
 
-    auto outcome = client->CreateTrainingJob(request);
-    if (!outcome.IsSuccess()) {
-        Logger::error("Failed to create SageMaker training job: " + outcome.GetError().GetMessage());
-    } else {
-        Logger::info("Successfully created SageMaker training job: " + jobName);
+void SageMakerManager::createTrainingJob(const std::string &jobName, const std::string &inputPath, const std::string &outputPath) {
+    if (jobName.empty()) {
+        throw std::runtime_error("Training job name cannot be empty");
     }
+    Logger::info("[LocalSageMaker] Creating training job: " + jobName);
+
+    const std::string jobDir = jobDirectory(jobName);
+    FileUtils::createDirectory(jobDir);
+    FileUtils::writeLines(PathUtils::join(jobDir, "status.txt"), {"CREATED"});
+    FileUtils::writeLines(PathUtils::join(jobDir, "input.txt"), {inputPath});
+    FileUtils::writeLines(PathUtils::join(jobDir, "output.txt"), {outputPath});
 }
 
 void SageMakerManager::waitForTrainingJob(const std::string &jobName) {
-    bool isTraining = true;
-    while (isTraining) {
-        std::this_thread::sleep_for(std::chrono::minutes(1));
-        Aws::SageMaker::Model::DescribeTrainingJobRequest request;
-        request.SetTrainingJobName(jobName.c_str());
+    const std::string jobDir = jobDirectory(jobName);
+    const std::string statusPath = PathUtils::join(jobDir, "status.txt");
 
-        auto outcome = client->DescribeTrainingJob(request);
-        if (!outcome.IsSuccess()) {
-            Logger::error("Failed to describe SageMaker training job: " + outcome.GetError().GetMessage());
-            return;
-        }
+    Logger::info("[LocalSageMaker] Starting training job: " + jobName);
+    FileUtils::writeLines(statusPath, {"IN_PROGRESS"});
 
-        auto status = outcome.GetResult().GetTrainingJobStatus();
-        Logger::info("SageMaker training job status: " + status);
-        if (status == Aws::SageMaker::Model::TrainingJobStatus::Completed ||
-            status == Aws::SageMaker::Model::TrainingJobStatus::Failed ||
-            status == Aws::SageMaker::Model::TrainingJobStatus::Stopped) {
-            isTraining = false;
-        }
+    const auto inputPathLines = FileUtils::readLines(PathUtils::join(jobDir, "input.txt"));
+    const auto outputPathLines = FileUtils::readLines(PathUtils::join(jobDir, "output.txt"));
+    if (inputPathLines.empty() || outputPathLines.empty()) {
+        throw std::runtime_error("Training job missing input/output paths: " + jobName);
     }
-    Logger::info("SageMaker training job completed: " + jobName);
+
+    TrainingJob job(config);
+    job.run(inputPathLines.front(), outputPathLines.front());
+
+    FileUtils::writeLines(statusPath, {"COMPLETED"});
+    Logger::info("[LocalSageMaker] Training job completed: " + jobName);
 }

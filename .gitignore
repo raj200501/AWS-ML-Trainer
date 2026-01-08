@@ -1,2 +1,5 @@
 /build
 /aws_credentials.json
+/local_s3
+/logs
+/output

@@ -1,16 +1,12 @@
 #!/bin/bash
+set -euo pipefail
 
-# Create build directory if it doesn't exist
-mkdir -p build
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+BUILD_DIR="$ROOT_DIR/build/output"
 
-# Navigate to the build directory
-cd build
+mkdir -p "$BUILD_DIR"
 
-# Run cmake to configure the project
-cmake ..
+cmake -S "$ROOT_DIR" -B "$BUILD_DIR"
+cmake --build "$BUILD_DIR"
 
-# Build the project
-make
-
-# Run the tests
-ctest
+ctest --test-dir "$BUILD_DIR" --output-on-failure
