@@ -7,6 +7,7 @@
 class Logger {
 public:
     static void init();
+    static void init(const std::string &logFilePath);
     static void shutdown();
     static void info(const std::string &message);
     static void warn(const std::string &message);
@@ -15,6 +16,7 @@ public:
 private:
     static void log(const std::string &message, const std::string &level);
     static std::ofstream logFile;
+    static std::string activeLogPath;
 };
 
 #endif // LOGGER_H

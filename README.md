@@ -2,27 +2,32 @@
 
 ## Overview
 
-**AWSMLTrainer** is a state-of-the-art C++ application designed for the efficient training of machine learning models on AWS. This application orchestrates the end-to-end machine learning pipeline, including data management, model training, and deployment, leveraging the robust services of AWS such as S3 for data storage and SageMaker for model training. The project comes with comprehensive logging, robust error handling, and utility modules to ensure seamless operation and easy integration into existing workflows.
+**AWSMLTrainer** is a C++ application that simulates an AWS-style machine learning workflow locally. It provides a deterministic training pipeline that:
+
+- Uploads training data to a local S3-style directory.
+- Runs a local "SageMaker" training job (linear regression over CSV data).
+- Exports model artifacts and metrics.
+- Downloads the trained model to a predictable output directory.
+
+This repository ships with a complete build, test, and verification workflow so a clean checkout can run the pipeline end-to-end without AWS credentials.
 
 ## Key Features
 
-- **Seamless Data Management**: Efficiently handle data uploads and downloads using AWS S3, ensuring secure and reliable storage.
-- **Advanced Model Training**: Leverage AWS SageMaker to create and manage training jobs, supporting a variety of machine learning frameworks.
-- **Comprehensive Logging**: Detailed logging for easy monitoring and troubleshooting.
-- **Robust Error Handling**: Centralized error management to handle and log errors effectively.
-- **Utility Modules**: Includes utility functions for file operations and string manipulations to support various tasks.
-- **Modular and Extensible**: Designed with a modular architecture to facilitate easy extensions and integrations.
+- **Local S3 emulation**: File-based bucket/object layout for deterministic uploads and downloads.
+- **Local SageMaker emulation**: Linear regression training job with metrics and manifest artifacts.
+- **Configurable pipeline**: `.env`-style config file + environment variable overrides.
+- **Comprehensive logging**: Logs stored in `logs/` for auditing and troubleshooting.
+- **Deterministic verification**: `scripts/verify.sh` builds, tests, and validates core behavior.
 
 ## Architecture
 
 ### Components
 
-- **Main Module**: Orchestrates the overall workflow, managing interactions between other components.
-- **S3 Manager**: Handles all operations related to AWS S3, including uploading training data and downloading model artifacts.
-- **SageMaker Manager**: Manages AWS SageMaker operations, from creating training jobs to monitoring their progress and retrieving results.
-- **Logger**: Provides detailed logging capabilities, capturing every significant event and error.
-- **Error Handler**: Centralized error handling mechanism to capture and log errors, ensuring smooth operation.
-- **Utilities**: Collection of utility functions to assist with file and string operations.
+- **Main Module**: Orchestrates local S3 upload, training job creation, and artifact download.
+- **S3 Manager**: Copies files into `local_s3/` buckets and retrieves artifacts.
+- **SageMaker Manager**: Creates a local training job, runs the training pipeline, and writes artifacts.
+- **Training Job**: Parses CSV, fits linear regression, writes `model.json` + `manifest.txt`.
+- **Logger**: Writes structured logs for every step.
 
 ## Installation
 
@@ -32,38 +37,74 @@
     cd AWSMLTrainer
     ```
 
-2. **Build the project**:
+2. **Build and test the project**:
     ```sh
     ./build/build.sh
     ```
 
 ## Configuration
 
-1. **Configure AWS credentials and settings** in `config/config.h`:
-    ```cpp
-    #ifndef CONFIG_H
-    #define CONFIG_H
+The pipeline reads configuration from `config/app_config.env` by default. The file format is simple `KEY=VALUE` pairs:
 
-    #include <string>
+```ini
+AWS_REGION=us-west-2
+S3_ROOT=local_s3
+S3_BUCKET=awsmltrainer-demo
+TRAINING_DATA_KEY=training-data.csv
+MODEL_OUTPUT_KEY=model-output
+TRAINING_JOB_NAME=local-training-job
+TRAINING_DATA_PATH=examples/example_data/training-data.csv
+OUTPUT_DIR=output
+LOGS_DIR=logs
+```
 
-    const std::string AWS_ACCESS_KEY = "your-access-key";
-    const std::string AWS_SECRET_KEY = "your-secret-key";
-    const std::string AWS_REGION = "your-region";
-    const std::string S3_BUCKET_NAME = "your-s3-bucket-name";
-    const std::string TRAINING_DATA_KEY = "training-data.csv";
-    const std::string MODEL_OUTPUT_KEY = "model-output";
-    const std::string TRAINING_IMAGE = "123456789012.dkr.ecr.us-west-2.amazonaws.com/my-training-image:latest";
-    const std::string ROLE_ARN = "arn:aws:iam::123456789012:role/SageMakerRole";
+Environment variables with the `AWSMLTRAINER_` prefix override values in the config file, for example:
 
-    #endif // CONFIG_H
-    ```
+```sh
+export AWSMLTRAINER_OUTPUT_DIR=output/custom
+```
 
 ## Usage
 
 1. **Run the application**:
     ```sh
-    ./AWSMLTrainer
+    ./scripts/run.sh
     ```
+
+2. **Expected output**:
+    - Model artifact: `output/model.json`
+    - Training logs: `logs/awsmltrainer.log`
+    - Local S3 bucket: `local_s3/awsmltrainer-demo/`
+
+## Verified Quickstart
+
+The following commands were executed successfully in this repository:
+
+```sh
+./scripts/run.sh
+```
+
+After running, `output/model.json` will contain a JSON payload with the trained slope/intercept and metrics.
+
+## Verified Verification
+
+To run the full deterministic verification (build, unit tests, integration smoke test):
+
+```sh
+./scripts/verify.sh
+```
+
+This command:
+1. Builds the project with CMake.
+2. Runs the unit tests.
+3. Executes the full training pipeline using the default config.
+4. Validates that `output/model.json` contains the expected sections.
+
+## Troubleshooting
+
+- **Missing model output**: Ensure `TRAINING_DATA_PATH` points to a valid CSV file with `feature,target` columns.
+- **Config errors**: Confirm `config/app_config.env` exists and uses `KEY=VALUE` syntax.
+- **Reproducibility**: Delete `output/` and rerun `./scripts/run.sh` to regenerate artifacts.
 
 ## License
 

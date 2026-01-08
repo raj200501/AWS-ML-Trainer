@@ -1,15 +1,22 @@
 #include "logger.h"
-#include <iostream>
-#include <fstream>
+#include "utils/file_utils.h"
 #include <chrono>
 #include <ctime>
+#include <iostream>
 
 std::ofstream Logger::logFile;
+std::string Logger::activeLogPath;
 
 void Logger::init() {
-    logFile.open("log.txt", std::ios::out | std::ios::app);
+    init("logs/awsmltrainer.log");
+}
+
+void Logger::init(const std::string &logFilePath) {
+    activeLogPath = logFilePath;
+    FileUtils::createParentDirectories(logFilePath);
+    logFile.open(logFilePath, std::ios::out | std::ios::app);
     if (!logFile.is_open()) {
-        std::cerr << "Failed to open log file." << std::endl;
+        std::cerr << "Failed to open log file: " << logFilePath << std::endl;
     }
 }
 
@@ -21,7 +28,9 @@ void Logger::shutdown() {
 
 void Logger::log(const std::string &message, const std::string &level) {
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    logFile << "[" << std::ctime(&now) << "] [" << level << "] " << message << std::endl;
+    if (logFile.is_open()) {
+        logFile << "[" << std::ctime(&now) << "] [" << level << "] " << message << std::endl;
+    }
     std::cout << "[" << level << "] " << message << std::endl;
 }
 

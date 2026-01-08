@@ -1,17 +1,22 @@
-#define CATCH_CONFIG_MAIN
-#include "catch.hpp"
+#include "path_utils.h"
 #include "s3_manager.h"
-#include "config.h"
+#include "test_framework.h"
+#include "test_paths.h"
+#include "utils/file_utils.h"
 
-TEST_CASE("S3Manager Upload and Download", "[s3]") {
-    S3Manager s3Manager(AWS_ACCESS_KEY, AWS_SECRET_KEY, AWS_REGION);
+TEST_CASE(S3ManagerUploadAndDownload) {
+    const std::string root = TestPaths::output("test_s3");
+    const std::string bucket = "unit-test-bucket";
+    const std::string inputFile = PathUtils::join(root, "input.txt");
+    const std::string downloadFile = PathUtils::join(root, "downloaded.txt");
 
-    SECTION("Upload file to S3") {
-        REQUIRE_NOTHROW(s3Manager.uploadFile("examples/example_data/training-data.csv", S3_BUCKET_NAME, "test/training-data.csv"));
-    }
+    FileUtils::writeLines(inputFile, {"hello", "world"});
 
-    SECTION("Download file from S3") {
-        REQUIRE_NOTHROW(s3Manager.downloadFile(S3_BUCKET_NAME, "test/training-data.csv", "output/test-training-data.csv"));
-        REQUIRE(FileUtils::fileExists("output/test-training-data.csv"));
-    }
+    S3Manager manager(root, "us-west-2");
+    manager.uploadFile(inputFile, bucket, "data/input.txt");
+
+    REQUIRE(FileUtils::fileExists(PathUtils::join(root, "unit-test-bucket/data/input.txt")));
+
+    manager.downloadFile(bucket, "data/input.txt", downloadFile);
+    REQUIRE(FileUtils::fileExists(downloadFile));
 }

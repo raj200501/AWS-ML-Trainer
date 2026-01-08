@@ -1,20 +1,19 @@
 #ifndef SAGEMAKER_MANAGER_H
 #define SAGEMAKER_MANAGER_H
 
-#include <aws/sagemaker/SageMakerClient.h>
-#include <memory>
+#include "config_loader.h"
 #include <string>
 
 class SageMakerManager {
 public:
-    SageMakerManager(const std::string &region);
-    void createTrainingJob(const std::string &jobName, const std::string &trainingImage, const std::string &roleArn,
-                           const std::string &inputBucket, const std::string &inputKey,
-                           const std::string &outputBucket, const std::string &outputKey);
+    SageMakerManager(const AppConfig &config);
+    void createTrainingJob(const std::string &jobName, const std::string &inputPath, const std::string &outputPath);
     void waitForTrainingJob(const std::string &jobName);
+    std::string outputPathForJob(const std::string &jobName) const;
 
 private:
-    std::shared_ptr<Aws::SageMaker::SageMakerClient> client;
+    AppConfig config;
+    std::string jobDirectory(const std::string &jobName) const;
 };
 
 #endif // SAGEMAKER_MANAGER_H

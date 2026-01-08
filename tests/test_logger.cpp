@@ -1,21 +1,17 @@
-#define CATCH_CONFIG_MAIN
-#include "catch.hpp"
 #include "logger.h"
+#include "test_framework.h"
+#include "test_paths.h"
+#include "utils/file_utils.h"
 
-TEST_CASE("Logger", "[logger]") {
-    Logger::init();
+TEST_CASE(LoggerInitializesAndWrites) {
+    const std::string logPath = TestPaths::output("test_logs/logger.log");
+    Logger::init(logPath);
 
-    SECTION("Log info message") {
-        REQUIRE_NOTHROW(Logger::info("This is an info message."));
-    }
-
-    SECTION("Log warning message") {
-        REQUIRE_NOTHROW(Logger::warn("This is a warning message."));
-    }
-
-    SECTION("Log error message") {
-        REQUIRE_NOTHROW(Logger::error("This is an error message."));
-    }
+    Logger::info("Info message");
+    Logger::warn("Warning message");
+    Logger::error("Error message");
 
     Logger::shutdown();
+
+    REQUIRE(FileUtils::fileExists(logPath));
 }
